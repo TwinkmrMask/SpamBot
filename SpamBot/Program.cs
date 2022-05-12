@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using System.Xml;
 using VkNet;
 using VkNet.Abstractions;
 using VkNet.Model;
@@ -46,7 +47,6 @@ namespace SpamBot
                     {
                         Print(i, $"Exp: {e.Message}");
                         break;
-
                     }
                 }
             }
@@ -77,12 +77,46 @@ namespace SpamBot
         }
 
         private byte[] HashSum(string text) => new HMACSHA1().ComputeHash(Encoding.ASCII.GetBytes(text));
-        
+
         void CreateConfig()
         {
         }
-        
-        void CheckConfig()
+
+        private static void CheckConfig()
+        {
+            
+            string? token;
+            string header;
+            string pattern;
+            
+            if (!File.Exists(IDefaultSettings.DefaultPath + IDefaultSettings.Config))
+                throw new Exception(message: "File is not exists");
+            var document = new XmlDocument();
+            var root = document.DocumentElement;
+            foreach (var general in from XmlElement item in root
+                     from XmlNode child in item.ChildNodes
+                     where child is {HasChildNodes: true}
+                     from XmlNode tag in child.ChildNodes
+                     where tag.Name == "config"
+                     from XmlNode general in tag.ChildNodes
+                     select general)
+            {
+                if (general.Name != "token") continue;
+                try
+                {
+                    token = general.Attributes?["text"]?.Value;
+                    
+                }
+                catch (Exception exception)
+                {
+                    CreateLog(exception.Message);
+                }
+            }
+
+            throw new Exception(message: "File is not exists");
+        }
+
+        void UpdateConfig()
         {
         }
 
@@ -92,21 +126,48 @@ namespace SpamBot
 
         protected static void CreateLog(int chat, string text)
         {
-            const string path = "../../../Resources/";
-            if (!Directory.Exists(path))
-                Directory.CreateDirectory(path);
-
-            using StreamWriter stream = new($"{path}logs.txt", true, Encoding.UTF8);
-            var mes = $"{DateTime.Now.TimeOfDay.TryFormat("hh:mm")} Chat {chat}: {text}";
-            stream.WriteLine(mes);
-            stream.Close();
+            var mes = $"{DateTime.Now} Chat {chat}: {text}";
+            Write(mes);
             Console.WriteLine(mes);
+        }
+
+        private static void CreateLog(string exp)
+        {
+            var mes = $"{DateTime.Now} Exp: {exp}";
+            Write(mes);
+            Console.WriteLine(mes);
+        }
+
+        private static void Write(string text)
+        {
+            using StreamWriter stream = new(IDefaultSettings.DefaultPath + IDefaultSettings.Log, true, Encoding.UTF8);
+            stream.WriteLine(text);
+            stream.Close();
         }
 
         void Start()
         {
             CheckConfig();
         }
+    }
 
+    public interface IDefaultSettings
+    {
+        static string DefaultPath
+        {
+            get
+            {
+                string path = "../../../Resources/";
+                if (!Directory.Exists(path))
+                    Directory.CreateDirectory(path);
+                return path;
+            }
+
+        }
+
+        const string Headers = "headers.txt";
+        const string Pattens = "patterns.txt";
+        const string Log = "logs.txt";
+        const string Config = "config.xml";
     }
 }
