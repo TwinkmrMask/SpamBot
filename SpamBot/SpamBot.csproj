@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net6.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Platform.Data" Version="0.8.0" />
+      <PackageReference Include="Platform.Data.Doublets" Version="0.6.8" />
+      <PackageReference Include="Platform.Disposables" Version="0.3.0" />
+      <PackageReference Include="VkNet" Version="1.69.0" />
+    </ItemGroup>
+
+</Project>
