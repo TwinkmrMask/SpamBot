@@ -1,58 +1,77 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using System.Text;
 using System.Xml;
 using VkNet;
 using VkNet.Abstractions;
+using VkNet.Enums.SafetyEnums;
 using VkNet.Model;
+using VkNet.Model.Attachments;
 using VkNet.Model.RequestParams;
 
 namespace SpamBot
 {
-    class Program : Service
+    // ReSharper disable once ClassNeverInstantiated.Global
+    internal class Program : Service
     {
         private static readonly VkApi? Api = new VkApi();
 
-        private const string Token =
-            "ec5620b8d98c4ed4f2a2c447d6e9fd5dc4ca50e2ff9ed393f0a702eaa3ab8f7a131282f1302ddf79e14bd";
+        private static ((string? @group, string? user) token, (string? header, string? pattern, string? logs) file, (
+            string? path, string? timer) service) _defaults;
 
-        private static void Main(string[] args)
+        private static void Main()
         {
-            Api?.Authorize(new ApiAuthParams() {AccessToken = Token});
-            Spam(Api);
+            _defaults = CheckConfig();
+            if (string.IsNullOrEmpty(_defaults.token.group))
+            {
+                Console.Write("Enter token: ");
+                _defaults.token.group = Console.ReadLine();
+            }
+            Api?.Authorize(new ApiAuthParams() {AccessToken = _defaults.token.group});
+            Spam(Api, "", _defaults.service.path + _defaults.file.logs, (-213080157, 457239019));
         }
 
-        private static void Spam(VkApi? api)
+        private static void Spam(IVkApiCategories? api, string mes, string? logFile, (int author, int id) attachment)
         {
-            while (true)
+            for (var i = 2;; i++)
             {
-                for (var i = 2;; i++)
+                try
                 {
-                    try
-                    {
-                        Thread.Sleep(15000);
-                        Console.WriteLine("Next message");
-                        const string mes = "Text";
-                        SendMessage(api, mes, i);
-                        CreateLog(i, mes);
-                        Console.WriteLine($"i: {i}, Mes: {mes}");
-                    }
-                    catch (VkNet.Exception.PermissionToPerformThisActionException e)
-                        when (e.Message ==
-                              "Permission to perform this action is denied: the user was kicked out of the conversation")
-                    {
-                        Print(i, e.Message);
-                    }
-                    catch (VkNet.Exception.ConversationAccessDeniedException e)
-                        when (e.Message == "You don't have access to this chat")
-                    {
-                        Print(i, $"Exp: {e.Message}");
-                        break;
-                    }
+                    Console.WriteLine("Next message");
+                    SendMessage(api, mes, i, GetPhoto(attachment));
+                    if (_defaults.service.timer == null)
+                        FilConfig("timer", out _defaults.service.timer, "service");
+                    Thread.Sleep(int.Parse(_defaults.service.timer));
+                    CreateLog(i, mes, _defaults.file.logs);
+                }
+                catch (VkNet.Exception.PermissionToPerformThisActionException e)
+                    when (e.Message ==
+                          "Permission to perform this action is denied: the user was kicked out of the conversation")
+                {
+                    CreateLog(i, e.Message, logFile);
+                }
+                catch (VkNet.Exception.ConversationAccessDeniedException e)
+                    when (e.Message == "You don't have access to this chat")
+                {
+                    CreateLog(i, $"Exp: {e.Message}", logFile);
+                    i = 1;
                 }
             }
         }
 
-        private static void Print(int i, string message) => CreateLog(i, message);
+        private static IEnumerable<Photo>? GetPhoto((int author, int id) attachment)
+        {
+            VkApi? vkApi = new();
+            vkApi.Authorize(new ApiAuthParams() {AccessToken = _defaults.token.user});
+
+            var (author, id) = attachment;
+            var photo = vkApi?.Photo.Get(new PhotoGetParams
+            {
+                OwnerId = author,
+                AlbumId = PhotoAlbumType.Profile,
+                PhotoIds = new List<string>() {id.ToString()},
+            });
+            
+            return photo;
+        }
 
         private static void SendMessage(IVkApiCategories? api, string message, int chatId)
         {
@@ -64,110 +83,98 @@ namespace SpamBot
                 Message = message
             });
         }
+
+        private static void SendMessage(IVkApiCategories? api, string message, int chatId,
+            IEnumerable<MediaAttachment>? attachment)
+        {
+            Random rnd = new();
+            var @params = new MessagesSendParams
+            {
+                RandomId = rnd.Next(),
+                ChatId = chatId,
+                Message = message,
+                Attachments = attachment
+            };
+            api?.Messages.Send(@params);
+        }
     }
 
     internal class Service
     {
-        void FileSubstitution()
-        {
-        }
+        private const string ConfigFile = "../../../Resources/config.xml";
 
-        void Copy()
+        private static (XmlDocument document, XmlElement? root) OpenConfig(string config)
         {
-        }
+            var document = new XmlDocument();
+            document.Load(ConfigFile);
+            var root = document.DocumentElement;
 
-        private byte[] HashSum(string text) => new HMACSHA1().ComputeHash(Encoding.ASCII.GetBytes(text));
+            return (document, root);
+        }
 
         void CreateConfig()
         {
+            // StreamReader streamReader =
+            // new(IDefaultSettings.DefaultPath + IDefaultSettings.Config, false, Encoding.UTF8);
         }
 
-        private static void CheckConfig()
+        protected static ((string? group, string? user) token, (string? header, string? pattern, string? logs) file, (
+            string? path, string? timer) service)
+            CheckConfig()
         {
-            
-            string? token;
-            string header;
-            string pattern;
-            
-            if (!File.Exists(IDefaultSettings.DefaultPath + IDefaultSettings.Config))
-                throw new Exception(message: "File is not exists");
-            var document = new XmlDocument();
-            var root = document.DocumentElement;
-            foreach (var general in from XmlElement item in root
-                     from XmlNode child in item.ChildNodes
-                     where child is {HasChildNodes: true}
-                     from XmlNode tag in child.ChildNodes
-                     where tag.Name == "config"
-                     from XmlNode general in tag.ChildNodes
-                     select general)
+            ((string? group, string? user) token, (string? header, string? pattern, string? logs) file, (string? path,
+                string? timer) service) config = default;
+
+            if (!File.Exists(ConfigFile))
+                throw new FileNotFoundException(message: "Config file is not exists");
+
+            foreach (XmlNode general in OpenConfig(ConfigFile).root!)
             {
-                if (general.Name != "token") continue;
-                try
+                switch (general.Name)
                 {
-                    token = general.Attributes?["text"]?.Value;
-                    
-                }
-                catch (Exception exception)
-                {
-                    CreateLog(exception.Message);
+                    case "token":
+                        config.token.group = general.SelectSingleNode("./groupToken")?.Attributes?["text"]?.Value;
+                        config.token.user = general.SelectSingleNode("./userToken")?.Attributes?["text"]?.Value;
+                        break;
+                    case "file":
+                        config.file.header = general.SelectSingleNode("./header")?.Attributes?["text"]?.Value;
+                        config.file.pattern = general.SelectSingleNode("./pattern")?.Attributes?["text"]?.Value;
+                        config.file.logs = general.SelectSingleNode("./logs")?.Attributes?["text"]?.Value;
+                        break;
+                    case "service":
+                        config.service.timer = general.SelectSingleNode("./timer")?.Attributes?["text"]?.Value;
+                        config.service.path = general.SelectSingleNode("./path")?.Attributes?["text"]?.Value;
+                        break;
                 }
             }
-
-            throw new Exception(message: "File is not exists");
+            
+            return config;
         }
 
-        void UpdateConfig()
+        protected static void FilConfig(string text, out string? expression, string level)
         {
+            Console.Write($"Введите {text}");
+            expression = Console.ReadLine();
+            
+            var (document, root) = OpenConfig(ConfigFile);
+            
+            foreach (var general in root!.Cast<XmlNode>().Where(general => general.Name == text))
+                general.SelectSingleNode($"./{level}/{text}")!.Attributes!["text"]!.Value = expression;
+            document.Save(ConfigFile);
         }
 
-        void FillConfig()
-        {
-        }
-
-        protected static void CreateLog(int chat, string text)
+        protected static void CreateLog(int chat, string text, string? file)
         {
             var mes = $"{DateTime.Now} Chat {chat}: {text}";
-            Write(mes);
+            Write(mes, file);
             Console.WriteLine(mes);
         }
 
-        private static void CreateLog(string exp)
+        private static void Write(string text, string? file)
         {
-            var mes = $"{DateTime.Now} Exp: {exp}";
-            Write(mes);
-            Console.WriteLine(mes);
-        }
-
-        private static void Write(string text)
-        {
-            using StreamWriter stream = new(IDefaultSettings.DefaultPath + IDefaultSettings.Log, true, Encoding.UTF8);
+            using StreamWriter stream = new(file, true, Encoding.UTF8);
             stream.WriteLine(text);
             stream.Close();
         }
-
-        void Start()
-        {
-            CheckConfig();
-        }
-    }
-
-    public interface IDefaultSettings
-    {
-        static string DefaultPath
-        {
-            get
-            {
-                string path = "../../../Resources/";
-                if (!Directory.Exists(path))
-                    Directory.CreateDirectory(path);
-                return path;
-            }
-
-        }
-
-        const string Headers = "headers.txt";
-        const string Pattens = "patterns.txt";
-        const string Log = "logs.txt";
-        const string Config = "config.xml";
     }
 }
