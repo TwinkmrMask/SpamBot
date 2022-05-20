@@ -39,7 +39,7 @@ namespace SpamBot
                     SendMessage(api, mes, i, GetPhoto(attachment));
                     if (_defaults.service.timer == null)
                         FilConfig("timer", out _defaults.service.timer, "service");
-                    Thread.Sleep(int.Parse(_defaults.service.timer));
+                    Thread.Sleep(int.Parse(_defaults.service.timer!));
                     CreateLog(i, mes, _defaults.file.logs);
                 }
                 catch (VkNet.Exception.PermissionToPerformThisActionException e)
@@ -59,11 +59,11 @@ namespace SpamBot
 
         private static IEnumerable<Photo>? GetPhoto((int author, int id) attachment)
         {
-            VkApi? vkApi = new();
+            VkApi vkApi = new();
             vkApi.Authorize(new ApiAuthParams() {AccessToken = _defaults.token.user});
 
             var (author, id) = attachment;
-            var photo = vkApi?.Photo.Get(new PhotoGetParams
+            var photo = vkApi.Photo.Get(new PhotoGetParams
             {
                 OwnerId = author,
                 AlbumId = PhotoAlbumType.Profile,
@@ -73,6 +73,7 @@ namespace SpamBot
             return photo;
         }
 
+        /*
         private static void SendMessage(IVkApiCategories? api, string message, int chatId)
         {
             Random rnd = new();
@@ -83,6 +84,7 @@ namespace SpamBot
                 Message = message
             });
         }
+        */
 
         private static void SendMessage(IVkApiCategories? api, string message, int chatId,
             IEnumerable<MediaAttachment>? attachment)
@@ -106,17 +108,17 @@ namespace SpamBot
         private static (XmlDocument document, XmlElement? root) OpenConfig(string config)
         {
             var document = new XmlDocument();
-            document.Load(ConfigFile);
+            document.Load(config);
             var root = document.DocumentElement;
 
             return (document, root);
         }
 
-        void CreateConfig()
-        {
+        //void CreateConfig()
+        //{
             // StreamReader streamReader =
             // new(IDefaultSettings.DefaultPath + IDefaultSettings.Config, false, Encoding.UTF8);
-        }
+        //}
 
         protected static ((string? group, string? user) token, (string? header, string? pattern, string? logs) file, (
             string? path, string? timer) service)
@@ -153,7 +155,7 @@ namespace SpamBot
 
         protected static void FilConfig(string text, out string? expression, string level)
         {
-            Console.Write($"Введите {text}");
+            Console.Write($"Enter {text}");
             expression = Console.ReadLine();
             
             var (document, root) = OpenConfig(ConfigFile);
@@ -172,7 +174,7 @@ namespace SpamBot
 
         private static void Write(string text, string? file)
         {
-            using StreamWriter stream = new(file, true, Encoding.UTF8);
+            using StreamWriter stream = new(file!, true, Encoding.UTF8);
             stream.WriteLine(text);
             stream.Close();
         }
