@@ -21,15 +21,23 @@ namespace SpamBot
     internal class Program : Settings
     {
         private static readonly VkApi? Api = new();
-        private static Config _config;
+        private static Config Config;
+
+        private static List<string> headers;
+        private static List<string> patterns;
+        private static List<string> attachments;
+
 
         private static void Main()
         {
             try
             {
-                _config = CheckConfig(ConfigFile);
-                Api?.Authorize(new ApiAuthParams() { AccessToken = _config.Token.Group });
-                Spam(Api, default, _config.Token.Group + _config.Token.Group, default);
+                Config = CheckConfig(ConfigFile);
+
+                Api?.Authorize(new ApiAuthParams() { AccessToken = Config.Token.Group });
+                
+                Spam(api: Api, logFile: Config.Service.Path + Config.File.Logs);
+                
             }
             catch (Exception exp)
             {
@@ -37,66 +45,57 @@ namespace SpamBot
             }
         }
 
-        private static void Spam(IVkApiCategories? api, string mes, string? logFile, (int author, int id) attachment)
+        private static void Spam(IVkApiCategories? api, string? logFile)
         {
+            headers = ReadFile(Config.Service.Path + Config.File.Headers, Config.File.Logs);
+            patterns = ReadFile(Config.Service.Path + Config.File.Patterns, Config.File.Logs);
+            attachments = ReadFile(Config.Service.Path + Config.File.Attachments, Config.File.Logs);
+
             Console.WriteLine("Start spam");
             for (var i = 2; ; i++)
             {
                 try
                 {
-                    if (attachment == default)
-                        SendMessage(api, mes, i);
-                    else
-                        SendMessage(api, mes, i, GetPhoto(attachment));
+                    Random rand = new();
+
+                    StringBuilder mes = new();
+                    mes.Append(headers[rand.Next(0, headers.Count - 1)]);
+                    mes.Append(patterns[rand.Next(0, patterns.Count - 1)]);
+
+                    string[] attachment = attachments[rand.Next(0, attachments.Count - 1)].Split('_');
+                    SendMessage(api, mes.ToString(), i, GetPhoto(attachment));
 
                     Console.WriteLine("Next message");
-                    CreateLog(i, mes, _config.File.Logs);
-                    Thread.Sleep(int.Parse(IsDefault(text: "timer", expression: _config.Service.Timer, level: "service", configFile: ConfigFile)));
-                }
-                catch (VkNet.Exception.PermissionToPerformThisActionException e)
-                    when (e.Message ==
-                          "Permission to perform this action is denied: the user was kicked out of the conversation")
-                {
-                    CreateLog(i, e.Message, logFile);
+
+                    CreateLog(i, mes.ToString(), Config.File.Logs);
+                    Thread.Sleep(int.Parse(IsDefault(text: "timer", expression: Config.Service.Timer, level: "service", configFile: ConfigFile)));
                 }
                 catch (VkNet.Exception.ConversationAccessDeniedException e)
-                    when (e.Message == "You don't have access to this chat")
                 {
-                    CreateLog(i, $"Exp: {e.Message}", logFile);
+                    CreateExpLog(e.Message, Config.File.Logs);
                     i = 1;
+                }
+                catch (Exception e)
+                {
+                    CreateExpLog(e.Message, Config.File.Logs);
                 }
             }
         }
-
-        private static IEnumerable<Photo>? GetPhoto((int author, int id) attachment)
+        private static IEnumerable<Photo>? GetPhoto(string[] attachment)
         {
             VkApi vkApi = new();
-            vkApi.Authorize(new ApiAuthParams() { AccessToken = _config.Token.User });
+            vkApi.Authorize(new ApiAuthParams() { AccessToken = Config.Token.User });
 
-            var (author, id) = attachment;
             var photo = vkApi.Photo.Get(new PhotoGetParams
             {
-                OwnerId = author,
+                OwnerId = long.Parse(attachment[0]),
                 AlbumId = PhotoAlbumType.Profile,
-                PhotoIds = new List<string>() { id.ToString() },
+                PhotoIds = new List<string>() { attachment[1] },
             });
 
             return photo;
         }
-
-        private static void SendMessage(IVkApiCategories? api, string message, int chatId)
-        {
-            Random rnd = new();
-            api?.Messages.Send(new MessagesSendParams
-            {
-                RandomId = rnd.Next(),
-                ChatId = chatId,
-                Message = message
-            });
-        }
-
-        private static void SendMessage(IVkApiCategories? api, string message, int chatId,
-            IEnumerable<MediaAttachment>? attachment)
+        private static void SendMessage(IVkApiCategories? api, string message, int chatId, IEnumerable<MediaAttachment>? attachment)
         {
             Random rnd = new();
             var @params = new MessagesSendParams
@@ -108,18 +107,14 @@ namespace SpamBot
             };
             api?.Messages.Send(@params);
         }
-
-        void OpenFile(string file)
+        static List<string> ReadFile(string file, string log)
         {
-            //List<string> data = new List<string>();
-            StreamReader reader = new(file, Encoding.UTF8);            
-            Console.WriteLine(reader.ReadToEnd());
-            reader.Close();
-        }
-
-        static List<string> Get()
-        {
-            return default;
+            List<string> _ = new();
+            if (System.IO.File.Exists(file))
+                using (StreamReader stream = new(file, Encoding.UTF8))
+                    _ = stream.ReadToEnd().Split("\n").ToList();
+            else CreateExpLog($"File {file} is not exists", log);
+            return _;
         }
 
     }
@@ -145,6 +140,7 @@ namespace SpamBot
             "    <userToken text = \"\"/>" + "\n" +
             "  </token>" + "\n" +
             "  <file>" + "\n" +
+            "    <logs text = \"\"/>" + "\n" +
             "    <header text = \"\"/>" + "\n" +
             "    <pattern text = \"\"/>" + "\n" +
             "    <attachment text = \"\"/>" + "\n" +
@@ -167,14 +163,12 @@ namespace SpamBot
             var root = document.DocumentElement;
             return (document, root);
         }
-
         static void CreateConfig(string configFile)
         {
             StreamWriter streamWriter = new(configFile, false, Encoding.UTF8);
             streamWriter.Write(template);
             streamWriter.Close();
         }
-
         protected static Config CheckConfig(string configFile)
         {
             Config config = new();
@@ -188,16 +182,14 @@ namespace SpamBot
                 switch (general.Name)
                 {
                     case "token":
-                        //config.Token.Group = IsDefault("groupToken", general.SelectSingleNode("./groupToken")?.Attributes?["text"]?.Value, "token", configFile);
-                        Console.WriteLine(general.SelectSingleNode("./groupToken").Attributes["text"].Value);
-                        //config.Token.Group = general.SelectSingleNode("./groupToken").Attributes["text"].Value;
-                        //Console.WriteLine(config.Token.Group);
+                        config.Token.Group = IsDefault("groupToken", general.SelectSingleNode("./groupToken")?.Attributes?["text"]?.Value, "token", configFile);
                         config.Token.User = IsDefault("userToken", general.SelectSingleNode("./userToken").Attributes["text"].Value, "token", configFile);
                         break;
                     case "file":
+                        config.File.Logs = IsDefault("logs", general.SelectSingleNode("./logs").Attributes["text"].Value, "file", configFile);
                         config.File.Headers = IsDefault("header", general.SelectSingleNode("./header").Attributes["text"].Value, "file", configFile);
                         config.File.Patterns = IsDefault("pattern", general.SelectSingleNode("./pattern").Attributes["text"].Value, "file", configFile);
-                        config.File.Logs = IsDefault("logs", general.SelectSingleNode("./logs").Attributes["text"].Value, "file", configFile);
+                        config.File.Attachments = IsDefault("attachment", general.SelectSingleNode("./attachment").Attributes["text"].Value, "file", configFile);
                         break;
                     case "service":
                         config.Service.Timer = IsDefault("timer", general.SelectSingleNode("./timer").Attributes["text"].Value, "service", configFile);
@@ -207,7 +199,6 @@ namespace SpamBot
             }
             return config;
         }
-
         protected static void FillConfig(string text, string expression, string level, string configFile)
         {
             var (document, root) = OpenConfig(configFile);
@@ -215,7 +206,6 @@ namespace SpamBot
                 general.SelectSingleNode($"./{text}")!.Attributes!["text"]!.Value = expression;
             document.Save(configFile);
         }
-
         protected static string IsDefault(string text, string expression, string level, string configFile)
         {
             if (!string.IsNullOrWhiteSpace(expression))
@@ -224,9 +214,8 @@ namespace SpamBot
             Console.Write($"Enter {text}: ");
             expression = Console.ReadLine();
             FillConfig(text, expression, level, configFile);
-            return IsDefault(expression, text, level, configFile);
+            return IsDefault(text, expression, level, configFile);
         }
-
         protected static void CreateLog(int chat, string text, string file)
         {
             var mes = $"{DateTime.Now} Chat {chat}: {text}";
@@ -237,7 +226,6 @@ namespace SpamBot
             else
                 Console.WriteLine("The log cannot be created");
         }
-
         protected static void CreateExpLog(string exp, string file)
         {
             var mes = $"{DateTime.Now} Exception: {exp} ";
@@ -248,28 +236,24 @@ namespace SpamBot
             else
                 Console.WriteLine("The log cannot be created");
         }
-
         private static void Write(string text, string? file)
         {
             using StreamWriter stream = new(file!, true, Encoding.UTF8);
             stream.WriteLine(text);
             stream.Close();
-        }
-    }
+        }    }
 
     class Config
     {
-        public Token Token { get; set; }
-        public File File { get; set; }
-        public Service Service { get; set; }
-    }
-        
+        public Token Token { get; set; } = new Token();
+        public File File { get; set; } = new File();
+        public Service Service { get; set; } = new Service();
+    }        
     class Token
     {
         public string Group { get; set; }
         public string User { get; set; }
     }
-
     class File
     {
         public string Headers { get; set; }
@@ -277,7 +261,6 @@ namespace SpamBot
         public string Attachments { get; set; }
         public string Logs { get; set; }
     }
-
     class Service
     {
         public string Timer { get; set; }
