@@ -50,18 +50,14 @@ namespace SpamBot
                 try
                 {
                     Random rand = new();
-
                     StringBuilder mes = new();
-                    mes.Append(headers[rand.Next(0, headers.Count - 1)]);
-                    mes.Append(patterns[rand.Next(0, patterns.Count - 1)]);
-
-                    string[] attachment = attachments[rand.Next(0, attachments.Count - 1)].Split('_');
+                    mes.Append(headers[rand.Next(0, headers.Count)]);
+                    mes.Append(" ");
+                    mes.Append(patterns[rand.Next(0, patterns.Count)]);
+                    string[] attachment = attachments[rand.Next(0, attachments.Count)].Split('_');
                     SendMessage(api, mes.ToString(), i, GetPhoto(attachment));
-
                     Console.WriteLine("Next message");
-
-                    CreateLog(i, mes.ToString(), Config.File.Logs);
-                    Thread.Sleep(int.Parse(IsDefault(text: "timer", expression: Config.Service.Timer, level: "service", configFile: ConfigFile)));
+                    CreateLog(i, mes.ToString(), attachment, Config.Service.Path + Config.File.Logs);
                 }
                 catch (VkNet.Exception.ConversationAccessDeniedException e)
                 {
@@ -78,13 +74,26 @@ namespace SpamBot
         {
             VkApi vkApi = new();
             vkApi.Authorize(new ApiAuthParams() { AccessToken = Config.Token.User });
-
-            var photo = vkApi.Photo.Get(new PhotoGetParams
+            IEnumerable<Photo>? photo;
+            try
             {
-                OwnerId = long.Parse(attachment[0]),
-                AlbumId = PhotoAlbumType.Profile,
-                PhotoIds = new List<string>() { attachment[1] },
-            });
+                photo = vkApi.Photo.Get(new PhotoGetParams
+                {
+                    OwnerId = long.Parse(attachment[0]),
+                    AlbumId = PhotoAlbumType.Id(long.Parse(attachment[2])),
+                    PhotoIds = new List<string>() { attachment[1] }
+                });
+            }
+
+            catch
+            {
+                photo = vkApi.Photo.Get(new PhotoGetParams
+                {
+                    OwnerId = long.Parse(attachment[0]),
+                    AlbumId = PhotoAlbumType.Profile,
+                    PhotoIds = new List<string>() { attachment[1] }
+                });
+            }
 
             return photo;
         }
@@ -99,6 +108,9 @@ namespace SpamBot
                 Attachments = attachment
             };
             api?.Messages.Send(@params);
+            int sleep = int.Parse(IsDefault(text: "timer", expression: Config.Service.Timer, level: "service", configFile: ConfigFile));
+            Console.WriteLine($"Timer: {sleep}");
+            Thread.Sleep(sleep);
         }
         static List<string> ReadFile(string file, string log)
         {
@@ -201,22 +213,22 @@ namespace SpamBot
             FillConfig(text, expression, level, configFile);
             return IsDefault(text, expression, level, configFile);
         }
-        protected static void CreateLog(int chat, string text, string file)
+        protected static void CreateLog(int chat, string text, string[] attachment, string file)
         {
-            var mes = $"{DateTime.Now} Chat {chat}: {text}";
-            Console.WriteLine(mes);
+            var mes = $"{DateTime.Now} Chat {chat}: {text}, Attachment: {attachment[0]}_{attachment[1]}";
+            Console.WriteLine($"{DateTime.Now} Chat {chat}: {text}\n");
 
-            if (file != default)
-                Write(mes, file);
-            else
-                Console.WriteLine("The log cannot be created");
+            if (!System.IO.File.Exists(file))
+                System.IO.File.Create(file);
+
+            Write(mes, file);
         }
         protected static void CreateExpLog(string exp, string file)
         {
             var mes = $"{DateTime.Now} Exception: {exp} ";
             Console.WriteLine(mes);
 
-            if (file != default)
+            if (System.IO.File.Exists(file))
                 Write(mes, file);
             else
                 Console.WriteLine("The log cannot be created");
