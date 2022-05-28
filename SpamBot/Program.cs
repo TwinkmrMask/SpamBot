@@ -33,11 +33,8 @@ namespace SpamBot
             try
             {
                 Config = CheckConfig(ConfigFile);
-
-                Api?.Authorize(new ApiAuthParams() { AccessToken = Config.Token.Group });
-                
-                Spam(api: Api, logFile: Config.Service.Path + Config.File.Logs);
-                
+                Api?.Authorize(new ApiAuthParams() { AccessToken = Config.Token.Group });                
+                Spam(Api, Config.Service.Path + Config.File.Logs);                
             }
             catch (Exception exp)
             {
@@ -116,9 +113,7 @@ namespace SpamBot
             else CreateExpLog($"File {file} is not exists", log);
             return _;
         }
-
     }
-
     internal class Settings
     {
         protected static string ConfigFile 
@@ -150,12 +145,6 @@ namespace SpamBot
             "    <path text = \"\" />" + "\n" +
             "  </service>" + "\n" +
             "</config>";
-
-        //delegates 
-        //protected delegate string CheckConfigDelegate();
-        //protected delegate string FillConfigDelegate(string text, string expression, string level, string configFile);
-
-        //methods
         private static (XmlDocument document, XmlElement? root) OpenConfig(string config)
         {
             var document = new XmlDocument();
@@ -241,8 +230,8 @@ namespace SpamBot
             using StreamWriter stream = new(file!, true, Encoding.UTF8);
             stream.WriteLine(text);
             stream.Close();
-        }    }
-
+        }
+    }
     class Config
     {
         public Token Token { get; set; } = new Token();
