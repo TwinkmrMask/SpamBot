@@ -23,10 +23,7 @@ namespace SpamBot
         private static readonly VkApi? Api = new();
         private static Config Config;
 
-        private static List<string> headers;
-        private static List<string> patterns;
-        private static List<string> attachments;
-
+        private static List<string> headers, patterns, attachments;
 
         private static void Main()
         {
@@ -41,11 +38,10 @@ namespace SpamBot
                 CreateExpLog(exp.Message + "\n" + exp.StackTrace, default);
             }
         }
-
         private static void Spam(IVkApiCategories? api, string? logFile)
         {
             headers = ReadFile(Config.Service.Path + Config.File.Headers, Config.File.Logs);
-            patterns = ReadFile(Config.Service.Path + Config.File.Patterns, Config.File.Logs);
+            patterns = ReadFile(Config.Service.Path + Config.File.Templates, Config.File.Logs);
             attachments = ReadFile(Config.Service.Path + Config.File.Attachments, Config.File.Logs);
 
             Console.WriteLine("Start spam");
@@ -137,7 +133,7 @@ namespace SpamBot
             "  <file>" + "\n" +
             "    <logs text = \"\"/>" + "\n" +
             "    <header text = \"\"/>" + "\n" +
-            "    <pattern text = \"\"/>" + "\n" +
+            "    <template text = \"\"/>" + "\n" +
             "    <attachment text = \"\"/>" + "\n" +
             "  </file>" + "\n" +
             "  <service>" + "\n" +
@@ -177,7 +173,7 @@ namespace SpamBot
                     case "file":
                         config.File.Logs = IsDefault("logs", general.SelectSingleNode("./logs").Attributes["text"].Value, "file", configFile);
                         config.File.Headers = IsDefault("header", general.SelectSingleNode("./header").Attributes["text"].Value, "file", configFile);
-                        config.File.Patterns = IsDefault("pattern", general.SelectSingleNode("./pattern").Attributes["text"].Value, "file", configFile);
+                        config.File.Templates = IsDefault("template", general.SelectSingleNode("./template").Attributes["text"].Value, "file", configFile);
                         config.File.Attachments = IsDefault("attachment", general.SelectSingleNode("./attachment").Attributes["text"].Value, "file", configFile);
                         break;
                     case "service":
@@ -246,7 +242,7 @@ namespace SpamBot
     class File
     {
         public string Headers { get; set; }
-        public string Patterns { get; set; }
+        public string Templates { get; set; }
         public string Attachments { get; set; }
         public string Logs { get; set; }
     }
